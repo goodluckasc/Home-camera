@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ক্যামেরা</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 16px;
+    }
+    video {
+      width: 100%;
+      max-width: 500px;
+      border-radius: 12px;
+      background: #000;
+    }
+    input {
+      width: 100%;
+      max-width: 500px;
+      padding: 14px;
+      font-size: 18px;
+      border-radius: 10px;
+      border: none;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      max-width: 500px;
+      padding: 14px;
+      font-size: 18px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+    }
+    #status { color: #fbbf24; text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>📷 ক্যামেরা মোড</h2>
+  <input id="code" placeholder="একটা গোপন কোড দাও (যেমন: sajal-home-4821)">
+  <button id="start">ক্যামেরা চালু করো</button>
+  <video id="preview" autoplay muted playsinline></video>
+  <div id="status">কোড লিখে বাটনে চাপো</div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const preview = document.getElementById('preview');
+    let stream, peer, wakeLock;
+
+    const iceServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+      // মোবাইল ডেটায় কানেক্ট না হলে এখানে TURN সার্ভার যোগ করবে
+    ];
+
+    async function keepAwake() {
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+      } catch (e) { console.log('wakeLock নেই', e); }
+    }
+
+    document.getElementById('start').onclick = async () => {
+      const code = document.getElementById('code').value.trim();
+      if (code.length < 6) {
+        statusEl.textContent = 'কোড অন্তত ৬ অক্ষরের দাও';
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: 1280, height: 720 },
+          audio: false
+        });
+      } catch (err) {
+        statusEl.textContent = 'ক্যামেরা পারমিশন পাওয়া যায়নি: ' + err.message;
+        return;
+      }
+
+      preview.srcObject = stream;
+      keepAwake();
+
+      peer = new Peer('homecam-' + code, { config: { iceServers } });
+
+      peer.on('open', () => {
+        statusEl.textContent = '✅ ক্যামেরা চালু। ভিউয়ারের জন্য অপেক্ষা করছে...';
+      });
+
+      peer.on('call', (call) => {
+        call.answer(stream);
+        statusEl.textContent = '🔴 কেউ লাইভ দেখছে';
+        call.on('close', () => {
+          statusEl.textContent = '✅ ক্যামেরা চালু। ভিউয়ারের জন্য অপেক্ষা করছে...';
+        });
+      });
+
+      peer.on('disconnected', () => peer.reconnect());
+
+      peer.on('error', (err) => {
+        statusEl.textContent = 'সমস্যা: ' + err.type;
+      });
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && stream) keepAwake();
+    });
+  </script>
+</body>
+</html>
