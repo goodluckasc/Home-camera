@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ক্যামেরা</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -28,7 +29,9 @@
       font-weight: 600; border: none; border-radius: 10px;
       background: #2563eb; color: white;
     }
+    button.drive { background: #475569; }
     #status { color: #fbbf24; text-align: center; }
+    #driveStatus { color: #94a3b8; text-align: center; font-size: 15px; }
     .row { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 10px; }
     .hidden { display: none !important; }
   </style>
@@ -41,13 +44,29 @@
     <button id="start">ক্যামেরা চালু করো</button>
   </div>
 
+  <div class="row">
+    <button id="driveBtn" class="drive">☁️ গুগল ড্রাইভ সংযোগ করো</button>
+  </div>
+
   <video id="preview" autoplay muted playsinline></video>
   <div id="status">কোড লিখে বাটনে চাপো</div>
+  <div id="driveStatus">ড্রাইভ: সংযুক্ত নয়</div>
 
   <script>
+    // ================= সেটিংস =================
+    const CLIENT_ID = '5086911283-ngrpb3acvettopls7bn55lpfco5t2ldo.apps.googleusercontent.com';
+    const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    const FOLDER_NAME = 'HomeCamera';   // ড্রাইভে এই নামে ফোল্ডার তৈরি হবে
+    const KEEP_DAYS = 3;                // এর চেয়ে পুরনো ক্লিপ মুছে যাবে
+    const SEGMENT_MS = 8000;            // প্রতিটি টুকরা ৮ সেকেন্ডের
+    const AFTER_MOTION_MS = 15000;      // নড়াচড়া থামার পরও ১৫ সেকেন্ড রেকর্ড চলবে
+    const MAX_QUEUE = 20;               // আপলোড আটকে গেলে সর্বোচ্চ ২০টা টুকরা জমা থাকবে
+
     const statusEl = document.getElementById('status');
+    const driveStatusEl = document.getElementById('driveStatus');
     const preview = document.getElementById('preview');
     const setup = document.getElementById('setup');
+    const driveBtn = document.getElementById('driveBtn');
     let stream, peer, wakeLock;
     let viewerConns = [];
 
@@ -57,8 +76,184 @@
       // মোবাইল ডেটায় কানেক্ট না হলে এখানে TURN সার্ভার যোগ করবে
     ];
 
-    // ---------- মোশন ডিটেকশন ----------
-    // ভিউয়ার থেকে সেনসিটিভিটি আসবে (১ = কম সংবেদনশীল, ১০০ = খুব সংবেদনশীল)
+    function driveStatus(msg, warn) {
+      driveStatusEl.textContent = msg;
+      driveStatusEl.style.color = warn ? '#f87171' : '#94a3b8';
+    }
+
+    // ================= গুগল ড্রাইভ =================
+    let tokenClient = null;
+    let accessToken = null;
+    let tokenExpiry = 0;
+    let folderId = null;
+    let lastCleanup = 0;
+    let uploadQueue = [];
+    let uploading = false;
+
+    function makeTokenClient() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPE,
+        callback: (resp) => {
+          if (resp.error) {
+            driveStatus('ড্রাইভ সংযোগ ব্যর্থ: ' + resp.error, true);
+            return;
+          }
+          accessToken = resp.access_token;
+          tokenExpiry = Date.now() + (Number(resp.expires_in) - 120) * 1000;
+          driveBtn.classList.add('hidden');
+          driveStatus('☁️ ড্রাইভ সংযুক্ত');
+          processQueue();
+        },
+        error_callback: () => {
+          driveBtn.textContent = '☁️ ড্রাইভ আবার সংযোগ করো';
+          driveBtn.classList.remove('hidden');
+          driveStatus('ড্রাইভ সংযোগ দরকার, বাটনে চাপো', true);
+        }
+      });
+    }
+
+    driveBtn.onclick = () => {
+      if (!window.google || !google.accounts) {
+        driveStatus('গুগল লাইব্রেরি লোড হয়নি, একটু পরে আবার চাপো', true);
+        return;
+      }
+      if (!tokenClient) makeTokenClient();
+      tokenClient.requestAccessToken({ prompt: '' });
+    };
+
+    async function driveFetch(url, opts) {
+      opts = opts || {};
+      const headers = Object.assign({}, opts.headers || {}, { Authorization: 'Bearer ' + accessToken });
+      const r = await fetch(url, Object.assign({}, opts, { headers }));
+      if (r.status === 401) {
+        accessToken = null;
+        throw new Error('টোকেনের মেয়াদ শেষ');
+      }
+      if (!r.ok) throw new Error('Drive ' + r.status);
+      return r;
+    }
+
+    async function getFolder() {
+      const q = encodeURIComponent("name='" + FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+      let r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)');
+      let j = await r.json();
+      if (j.files && j.files.length) return j.files[0].id;
+      r = await driveFetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+      });
+      j = await r.json();
+      return j.id;
+    }
+
+    async function uploadFile(item) {
+      const meta = { name: item.name, parents: [folderId] };
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+      form.append('file', item.blob);
+      await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        body: form
+      });
+    }
+
+    // ৩ দিনের বেশি পুরনো ক্লিপ মুছে ফেলা (ঘণ্টায় সর্বোচ্চ একবার চেক)
+    async function cleanupOld() {
+      if (Date.now() - lastCleanup < 3600000) return;
+      lastCleanup = Date.now();
+      try {
+        const cutoff = new Date(Date.now() - KEEP_DAYS * 86400000).toISOString();
+        const q = encodeURIComponent("'" + folderId + "' in parents and createdTime < '" + cutoff + "' and trashed=false");
+        const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&pageSize=100');
+        const j = await r.json();
+        for (const f of (j.files || [])) {
+          await driveFetch('https://www.googleapis.com/drive/v3/files/' + f.id, { method: 'DELETE' });
+        }
+      } catch (e) {
+        console.log('পুরনো ফাইল মোছা যায়নি', e);
+      }
+    }
+
+    async function processQueue() {
+      if (uploading || !uploadQueue.length) return;
+      if (!accessToken || Date.now() > tokenExpiry) {
+        // টোকেন শেষ: চুপচাপ নতুন টোকেন চাওয়া, না পেলে বাটন দেখানো
+        if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
+        return;
+      }
+      uploading = true;
+      try {
+        if (!folderId) folderId = await getFolder();
+        while (uploadQueue.length) {
+          await uploadFile(uploadQueue[0]);
+          uploadQueue.shift();
+          driveStatus('☁️ ক্লিপ আপলোড হয়েছে (' + new Date().toLocaleTimeString('bn-BD') + ')');
+        }
+        cleanupOld();
+      } catch (e) {
+        driveStatus('আপলোড সমস্যা: ' + e.message, true);
+      }
+      uploading = false;
+    }
+    setInterval(processQueue, 30000);
+
+    function enqueue(seg) {
+      if (!tokenClient) return; // ড্রাইভ কখনো সংযোগ না করলে ক্লিপ জমানো হবে না
+      const stamp = new Date(seg.time).toISOString().replace(/[:.]/g, '-');
+      uploadQueue.push({ name: 'clip-' + stamp + '.' + recExt, blob: seg.blob });
+      while (uploadQueue.length > MAX_QUEUE) uploadQueue.shift();
+      processQueue();
+    }
+
+    // ================= ইভেন্ট রেকর্ডিং =================
+    // ক্যামেরা সারাক্ষণ ৮ সেকেন্ডের টুকরায় রেকর্ড করে, শুধু মেমোরিতে রাখে।
+    // নড়াচড়া ধরা পড়লে আগের টুকরা + বর্তমান টুকরা + নড়াচড়া থামার ১৫ সেকেন্ড পর্যন্ত টুকরাগুলো ড্রাইভে যায়।
+    const recMime = ['video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+      .find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+    const recExt = recMime && recMime.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
+    let recording = false;
+    let prevSeg = null;
+    let curMotion = false;
+    let keepUntil = 0;
+
+    function startSegments() {
+      if (!recMime) {
+        driveStatus('এই ব্রাউজারে ভিডিও রেকর্ডিং সাপোর্ট নেই', true);
+        return;
+      }
+      recording = true;
+      runSegment();
+    }
+
+    function runSegment() {
+      if (!recording || !stream) return;
+      const chunks = [];
+      const startTime = Date.now();
+      const rec = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 600000 });
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        onSegmentEnd(new Blob(chunks, { type: recMime }), startTime);
+        runSegment();
+      };
+      rec.start();
+      setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, SEGMENT_MS);
+    }
+
+    function onSegmentEnd(blob, startTime) {
+      const seg = { blob: blob, time: startTime, saved: false };
+      const shouldSave = curMotion || Date.now() < keepUntil;
+      if (shouldSave) {
+        if (prevSeg && !prevSeg.saved) { enqueue(prevSeg); prevSeg.saved = true; }
+        enqueue(seg);
+        seg.saved = true;
+      }
+      prevSeg = seg;
+      curMotion = false;
+    }
+
+    // ================= মোশন ডিটেকশন =================
     let sensitivity = 50;
     let motionOn = true;
     let lastAlert = 0;
@@ -80,7 +275,6 @@
       if (prevFrame) {
         let changed = 0;
         const pixels = data.length / 4;
-        // সেনসিটিভিটি যত বেশি, পিক্সেল পার্থক্যের সীমা তত কম
         const pixelThreshold = 60 - sensitivity * 0.5;
         for (let i = 0; i < data.length; i += 4) {
           const diff =
@@ -90,25 +284,30 @@
           if (diff / 3 > pixelThreshold) changed++;
         }
         const percent = (changed / pixels) * 100;
-        // কতটুকু অংশ বদলালে অ্যালার্ট হবে
         const areaThreshold = 12 - sensitivity * 0.1;
 
-        if (percent > areaThreshold && Date.now() - lastAlert > 3000) {
-          lastAlert = Date.now();
-          sendToViewers({ type: 'motion', time: Date.now(), percent: Math.round(percent) });
+        if (percent > areaThreshold) {
+          // রেকর্ডিংয়ের জন্য প্রতিবারই চিহ্ন দিয়ে রাখো
+          curMotion = true;
+          keepUntil = Date.now() + AFTER_MOTION_MS;
+          // ভিউয়ারকে অ্যালার্ট পাঠাও (৩ সেকেন্ডে একবার)
+          if (Date.now() - lastAlert > 3000) {
+            lastAlert = Date.now();
+            sendToViewers({ type: 'motion', time: Date.now(), percent: Math.round(percent) });
+          }
         }
       }
       prevFrame = new Uint8ClampedArray(data);
     }
     setInterval(checkMotion, 500);
 
-    // ---------- স্ক্রিন জাগিয়ে রাখা ----------
+    // ================= স্ক্রিন জাগিয়ে রাখা =================
     async function keepAwake() {
       try { wakeLock = await navigator.wakeLock.request('screen'); }
       catch (e) { console.log('wakeLock নেই', e); }
     }
 
-    // ---------- ক্যামেরা চালু ----------
+    // ================= ক্যামেরা চালু =================
     document.getElementById('start').onclick = async () => {
       const input = document.getElementById('code');
       const code = input.value.trim();
@@ -117,7 +316,6 @@
         return;
       }
 
-      // কোড নেওয়ার সাথে সাথেই ইনপুট আর বাটন লুকিয়ে ফেলো
       input.value = '';
       setup.classList.add('hidden');
 
@@ -134,6 +332,7 @@
 
       preview.srcObject = stream;
       keepAwake();
+      startSegments();
 
       peer = new Peer('homecam-' + code, { config: { iceServers } });
 
@@ -141,7 +340,6 @@
         statusEl.textContent = '✅ ক্যামেরা চালু। ভিউয়ারের জন্য অপেক্ষা করছে...';
       });
 
-      // ভিউয়ারের সাথে ডেটা চ্যানেল (সেনসিটিভিটি আসবে, মোশন সংকেত যাবে)
       peer.on('connection', (conn) => {
         viewerConns.push(conn);
         conn.on('data', (msg) => {
