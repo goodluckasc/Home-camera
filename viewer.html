@@ -17,47 +17,72 @@
       align-items: center;
       gap: 14px;
       padding: 16px;
+      transition: background 0.2s;
     }
-    video {
-      width: 100%;
-      max-width: 700px;
-      border-radius: 12px;
-      background: #000;
-    }
-    input {
-      width: 100%;
-      max-width: 500px;
-      padding: 14px;
-      font-size: 18px;
-      border-radius: 10px;
-      border: none;
-      text-align: center;
+    body.alarm { background: #7f1d1d; }
+    video { width: 100%; max-width: 700px; border-radius: 12px; background: #000; }
+    input[type=password] {
+      width: 100%; max-width: 500px; padding: 14px; font-size: 18px;
+      border-radius: 10px; border: none; text-align: center;
     }
     button {
-      width: 100%;
-      max-width: 500px;
-      padding: 14px;
-      font-size: 18px;
-      font-weight: 600;
-      border: none;
-      border-radius: 10px;
-      background: #16a34a;
-      color: white;
+      width: 100%; max-width: 500px; padding: 14px; font-size: 18px;
+      font-weight: 600; border: none; border-radius: 10px;
+      background: #16a34a; color: white;
     }
     #status { color: #fbbf24; text-align: center; }
+    .row { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 10px; }
+    .hidden { display: none !important; }
+    #controls {
+      width: 100%; max-width: 500px; background: #1e293b;
+      padding: 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px;
+    }
+    #controls label { display: flex; justify-content: space-between; }
+    input[type=range] { width: 100%; }
+    #alert {
+      width: 100%; max-width: 500px; padding: 14px; border-radius: 12px;
+      background: #dc2626; color: white; font-size: 20px; font-weight: 700;
+      text-align: center;
+    }
+    #alert button { background: white; color: #dc2626; margin-top: 10px; }
   </style>
 </head>
 <body>
   <h2>👀 ভিউয়ার মোড</h2>
-  <input id="code" placeholder="ক্যামেরার সেই গোপন কোড দাও">
-  <button id="connect">লাইভ দেখো</button>
+
+  <div class="row" id="setup">
+    <input id="code" type="password" autocomplete="off" placeholder="ক্যামেরার গোপন কোড দাও">
+    <button id="connect">লাইভ দেখো</button>
+  </div>
+
+  <div id="alert" class="hidden">
+    ⚠️ নড়াচড়া ধরা পড়েছে!
+    <div id="alertTime" style="font-size:14px;font-weight:400"></div>
+    <button id="stopAlarm">অ্যালার্ম বন্ধ করো</button>
+  </div>
+
   <video id="remote" autoplay playsinline controls></video>
   <div id="status">কোড লিখে বাটনে চাপো</div>
+
+  <div id="controls" class="hidden">
+    <label>
+      <span>মোশন সেনসিটিভিটি</span>
+      <span id="sensVal">50</span>
+    </label>
+    <input id="sens" type="range" min="1" max="100" value="50">
+    <label>
+      <span>মোশন অ্যালার্ট চালু</span>
+      <input id="motionToggle" type="checkbox" checked>
+    </label>
+  </div>
 
   <script>
     const statusEl = document.getElementById('status');
     const remote = document.getElementById('remote');
-    let peer, currentCall;
+    const setup = document.getElementById('setup');
+    const controls = document.getElementById('controls');
+    const alertBox = document.getElementById('alert');
+    let peer, currentCall, dataConn, audioCtx, alarmTimer;
 
     const iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -65,19 +90,88 @@
       // মোবাইল ডেটায় কানেক্ট না হলে এখানে TURN সার্ভার যোগ করবে
     ];
 
-    // PeerJS-এর call করতে একটা ভিডিও ট্র্যাক লাগে, তাই একটা ফাঁকা স্ট্রিম বানাই
     function dummyStream() {
-      const canvas = document.createElement('canvas');
-      canvas.width = 2; canvas.height = 2;
-      canvas.getContext('2d').fillRect(0, 0, 2, 2);
-      return canvas.captureStream(1);
+      const c = document.createElement('canvas');
+      c.width = 2; c.height = 2;
+      c.getContext('2d').fillRect(0, 0, 2, 2);
+      return c.captureStream(1);
     }
 
+    // ---------- বিপ শব্দ ----------
+    function beep(freq = 880, duration = 0.18) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.25;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function startAlarm() {
+      alertBox.classList.remove('hidden');
+      document.body.classList.add('alarm');
+      document.getElementById('alertTime').textContent =
+        new Date().toLocaleTimeString('bn-BD');
+
+      if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+
+      clearInterval(alarmTimer);
+      let n = 0;
+      // বিপ বিপ বিপ, প্রতি ১ সেকেন্ডে তিনবার করে
+      alarmTimer = setInterval(() => {
+        beep(n % 2 === 0 ? 880 : 660);
+        n++;
+        if (n >= 6) clearInterval(alarmTimer);
+      }, 220);
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('⚠️ নড়াচড়া ধরা পড়েছে', { body: 'ক্যামেরার সামনে কিছু নড়ছে' });
+      }
+    }
+
+    function stopAlarm() {
+      clearInterval(alarmTimer);
+      alertBox.classList.add('hidden');
+      document.body.classList.remove('alarm');
+      if (navigator.vibrate) navigator.vibrate(0);
+    }
+    document.getElementById('stopAlarm').onclick = stopAlarm;
+
+    // ---------- স্লাইডার ও টগল ----------
+    const sens = document.getElementById('sens');
+    sens.oninput = () => {
+      document.getElementById('sensVal').textContent = sens.value;
+      if (dataConn && dataConn.open) {
+        dataConn.send({ type: 'sensitivity', value: Number(sens.value) });
+      }
+    };
+    document.getElementById('motionToggle').onchange = (e) => {
+      if (dataConn && dataConn.open) {
+        dataConn.send({ type: 'motionOn', value: e.target.checked });
+      }
+    };
+
+    // ---------- কানেক্ট ----------
     document.getElementById('connect').onclick = () => {
-      const code = document.getElementById('code').value.trim();
+      const input = document.getElementById('code');
+      const code = input.value.trim();
       if (code.length < 6) {
         statusEl.textContent = 'কোড অন্তত ৬ অক্ষরের দাও';
         return;
+      }
+
+      // বাটন চাপার সাথে সাথেই কোড মুছে ইনপুট লুকাও
+      input.value = '';
+      setup.classList.add('hidden');
+
+      // বিপ বাজাতে ব্রাউজারে ইউজারের ট্যাপের ভেতরেই অডিও চালু করতে হয়
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
       }
 
       if (peer) peer.destroy();
@@ -86,7 +180,20 @@
       peer = new Peer({ config: { iceServers } });
 
       peer.on('open', () => {
-        currentCall = peer.call('homecam-' + code, dummyStream());
+        const camId = 'homecam-' + code;
+
+        // ডেটা চ্যানেল (মোশন সংকেত আসবে, সেনসিটিভিটি যাবে)
+        dataConn = peer.connect(camId, { reliable: true });
+        dataConn.on('open', () => {
+          controls.classList.remove('hidden');
+          dataConn.send({ type: 'sensitivity', value: Number(sens.value) });
+        });
+        dataConn.on('data', (msg) => {
+          if (msg.type === 'motion') startAlarm();
+        });
+
+        // ভিডিও কল
+        currentCall = peer.call(camId, dummyStream());
 
         currentCall.on('stream', (stream) => {
           remote.srcObject = stream;
@@ -96,10 +203,12 @@
 
         currentCall.on('close', () => {
           statusEl.textContent = 'কানেকশন বন্ধ হয়ে গেছে';
+          setup.classList.remove('hidden');
         });
 
         currentCall.on('error', (e) => {
           statusEl.textContent = 'কল সমস্যা: ' + e;
+          setup.classList.remove('hidden');
         });
       });
 
@@ -109,6 +218,7 @@
         } else {
           statusEl.textContent = 'সমস্যা: ' + err.type;
         }
+        setup.classList.remove('hidden');
       });
     };
   </script>
