@@ -38,7 +38,7 @@
     }
     .pill:active { transform: scale(0.95); }
 
-    /* ক্যামেরার গ্রিড */
+    /* ক্যামেরার গ্রিড (সবসময় ল্যান্ডস্কেপ টাইল) */
     #grid {
       position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 1;
       padding: calc(max(12px, env(safe-area-inset-top)) + 52px) 6px calc(max(14px, env(safe-area-inset-bottom)) + 150px);
@@ -53,30 +53,38 @@
       #grid.c3, #grid.c4 { grid-template-columns: 1fr 1fr 1fr; }
     }
     .tile {
-      position: relative; background: #0b0b0e; border-radius: 14px; overflow: hidden;
+      position: relative; background: #000; border-radius: 14px; overflow: hidden;
       border: 2px solid #1c1c22; min-height: 0;
     }
-    .tile video { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
+    /* ভিডিও জায়গামতো বসানো হয় জাভাস্ক্রিপ্ট দিয়ে (ঘোরানোর জন্য) */
+    .tile video {
+      position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+      object-fit: cover; background: #000; transform-origin: center center;
+    }
     .tile.alarm { border-color: #ef4444; animation: blink 0.5s infinite; }
     @keyframes blink { 50% { border-color: #7f1d1d; } }
     .tile .label {
-      position: absolute; left: 8px; top: 8px; padding: 4px 10px; border-radius: 999px;
+      position: absolute; left: 8px; top: 8px; z-index: 2; padding: 4px 10px; border-radius: 999px;
       font-size: 12px; font-weight: 700; background: #000000a6; display: flex; gap: 6px; align-items: center;
     }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; }
     .tile.live .dot { background: #ef4444; animation: pulse 1.2s infinite; }
     @keyframes pulse { 50% { opacity: 0.25; } }
     .tile .state {
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      color: #8e8e93; font-size: 14px; text-align: center; padding: 10px; pointer-events: none;
+      position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+      color: #3a3a40; font-size: 14px; text-align: center; padding: 10px; pointer-events: none;
     }
     .tile.live .state { display: none; }
-    .tile .spk {
-      position: absolute; right: 8px; bottom: 8px; width: 42px; height: 42px; border-radius: 50%;
+    .tile .spk, .tile .rot {
+      position: absolute; bottom: 8px; z-index: 2; width: 42px; height: 42px; border-radius: 50%;
       border: 0; background: #000000a6; font-size: 19px; color: #fff;
     }
+    .tile .spk { right: 8px; }
+    .tile .rot { right: 58px; }
+    .tile.live .rot, .tile.live .spk { opacity: 1; }
+    .tile:not(.live) .spk { opacity: 0.35; }
 
-    /* বড় করা ক্যামেরা */
+    /* বড় করা ক্যামেরা: পুরো ছবি দেখা যায় */
     #grid.zoom { display: block; padding: calc(max(12px, env(safe-area-inset-top)) + 52px) 0 calc(max(14px, env(safe-area-inset-bottom)) + 150px); }
     #grid.zoom .tile { display: none; border-radius: 0; }
     #grid.zoom .tile.big { display: block; width: 100%; height: 100%; }
@@ -191,7 +199,7 @@
   <div id="setup">
     <img src="icon.svg" alt="">
     <h2>আমার ক্যামেরা</h2>
-    <p>প্রতিটা ক্যামেরা ফোনে আলাদা গোপন কোড দিয়ে চালু করতে হবে। এখানে নাম আর কোড একবার সেভ করলে পরেরবার শুধু একটা বাটনে সব চালু হবে।</p>
+    <p>প্রতিটা ক্যামেরা ফোনে আলাদা গোপন কোড দিয়ে চালু করতে হবে। এখানে নাম আর কোড একবার সেভ করলে পরেরবার অ্যাপ খুললেই সব ক্যামেরা নিজে থেকে চালু হবে।</p>
 
     <div id="saved"></div>
 
@@ -209,6 +217,7 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
     const STORE_KEY = 'homecam-cameras-v1';
+    const RETRY_MS = 8000;       // অফলাইন ক্যামেরায় প্রতি ৮ সেকেন্ডে আবার চেষ্টা
     const grid = document.getElementById('grid');
     const setup = document.getElementById('setup');
     const setupMsg = document.getElementById('setupMsg');
@@ -216,6 +225,7 @@
     const alertBox = document.getElementById('alert');
     const sens = document.getElementById('sens');
     const motionToggle = document.getElementById('motionToggle');
+    const backBtn = document.getElementById('back');
 
     const iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -224,7 +234,7 @@
     ];
 
     // ---------- সেভ করা ক্যামেরার তালিকা ----------
-    // ফোনের ব্রাউজারেই জমা থাকে, কোথাও পাঠানো হয় না। selected = এবার দেখানো হবে কিনা
+    // ফোনের ব্রাউজারেই জমা থাকে। selected = দেখানো হবে কিনা, rot = ঘোরানো কোণ (০/৯০/১৮০/২৭০)
     let cams = [];
     try { cams = JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch (e) { cams = []; }
     function saveCams() { localStorage.setItem(STORE_KEY, JSON.stringify(cams)); }
@@ -233,7 +243,9 @@
       const box = document.getElementById('saved');
       box.innerHTML = '';
       if (!cams.length) {
-        box.innerHTML = '<p>এখনো কোনো ক্যামেরা যোগ করা হয়নি</p>';
+        const p = document.createElement('p');
+        p.textContent = 'এখনো কোনো ক্যামেরা যোগ করা হয়নি';
+        box.appendChild(p);
         return;
       }
       cams.forEach((c, i) => {
@@ -267,9 +279,8 @@
       if (code.length < 6) { setupMsg.textContent = 'কোড অন্তত ৬ অক্ষরের দাও'; return; }
       if (cams.length >= 4) { setupMsg.textContent = 'সর্বোচ্চ ৪টা ক্যামেরা যোগ করা যাবে'; return; }
       if (cams.some(c => c.code === code)) { setupMsg.textContent = 'এই কোড আগেই যোগ করা আছে'; return; }
-      cams.push({ name: name, code: code, selected: true });
+      cams.push({ name: name, code: code, selected: true, rot: 0 });
       saveCams();
-      // যোগ করার সাথে সাথেই ইনপুট খালি, কোড স্ক্রিনে থাকে না
       nameEl.value = '';
       codeEl.value = '';
       setupMsg.textContent = '';
@@ -282,8 +293,24 @@
         new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
     }, 1000);
 
-    // ---------- নীরব অডিও ট্র্যাকসহ ডামি স্ট্রিম ----------
+    // ---------- অডিও চালু (প্রথম ট্যাপে) ----------
+    let audioCtx = null;
     let sharedAudioCtx = null;
+    let askedNotify = false;
+    function unlockAudio() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+      } catch (e) {}
+      if (!askedNotify && 'Notification' in window && Notification.permission === 'default') {
+        askedNotify = true;
+        Notification.requestPermission();
+      }
+    }
+    document.addEventListener('pointerdown', unlockAudio);
+
+    // ---------- নীরব অডিও ট্র্যাকসহ ডামি স্ট্রিম ----------
     function dummyStream() {
       const c = document.createElement('canvas');
       c.width = 2; c.height = 2;
@@ -304,10 +331,9 @@
     }
 
     // ---------- বিপ শব্দ ----------
-    let audioCtx = null;
     let alarmTimer = null;
     function beep(freq, duration) {
-      if (!audioCtx) return;
+      if (!audioCtx || audioCtx.state !== 'running') return;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'square';
@@ -349,23 +375,41 @@
       if (navigator.vibrate) navigator.vibrate(0);
     };
 
-    // ---------- সংযোগ: প্রতিটা ক্যামেরার জন্য আলাদা Peer ----------
-    let sessions = [];   // { cam, peer, dataConn, call, tile, video, spk }
-
-    function closeAll() {
-      sessions.forEach(s => {
-        try { s.call && s.call.close(); } catch (e) {}
-        try { s.dataConn && s.dataConn.close(); } catch (e) {}
-        try { s.peer && s.peer.destroy(); } catch (e) {}
-      });
-      sessions = [];
-      grid.innerHTML = '';
-      grid.className = '';
+    // ---------- ভিডিও ঘোরানো ও ল্যান্ডস্কেপ টাইলে বসানো ----------
+    function layoutVideo(s) {
+      const w = s.tile.clientWidth;
+      const h = s.tile.clientHeight;
+      if (!w || !h) return;
+      const rot = (s.cam.rot || 0) % 360;
+      const v = s.video;
+      v.style.transform = 'rotate(' + rot + 'deg)';
+      if (rot % 180 === 0) {
+        v.style.width = w + 'px';
+        v.style.height = h + 'px';
+        v.style.left = '0px';
+        v.style.top = '0px';
+      } else {
+        // ৯০/২৭০ ডিগ্রিতে বাক্সের মাপ উল্টে দিতে হয়, নইলে টাইলের বাইরে চলে যায়
+        v.style.width = h + 'px';
+        v.style.height = w + 'px';
+        v.style.left = ((w - h) / 2) + 'px';
+        v.style.top = ((h - w) / 2) + 'px';
+      }
     }
+
+    // ---------- সংযোগ: প্রতিটা ক্যামেরার জন্য আলাদা Peer ----------
+    let sessions = [];
 
     function setState(s, text, live) {
       s.tile.classList.toggle('live', !!live);
       s.tile.querySelector('.state').textContent = text;
+    }
+
+    // ক্যামেরা না থাকলে টাইল কালো থাকে (টাইল সবসময় থাকে)
+    function goOffline(s, text) {
+      s.live = false;
+      s.video.srcObject = null;
+      setState(s, text, false);
     }
 
     function makeTile(cam) {
@@ -375,10 +419,11 @@
       video.autoplay = true; video.muted = true; video.playsInline = true;
       const label = document.createElement('div');
       label.className = 'label';
-      label.innerHTML = '<span class="dot"></span>';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
       const nm = document.createElement('span');
       nm.textContent = cam.name;
-      label.appendChild(nm);
+      label.append(dot, nm);
       const state = document.createElement('div');
       state.className = 'state';
       state.textContent = 'সংযোগ হচ্ছে...';
@@ -391,86 +436,177 @@
         spk.textContent = video.muted ? '🔇' : '🔊';
         video.play().catch(() => {});
       };
-      tile.append(video, label, state, spk);
+      const rot = document.createElement('button');
+      rot.className = 'rot';
+      rot.textContent = '🔄';
+      rot.title = 'ছবি ঘোরাও';
+      tile.append(video, label, state, rot, spk);
       tile.onclick = () => {
         if (grid.classList.contains('zoom')) return;
         grid.classList.add('zoom');
         tile.classList.add('big');
-        document.getElementById('back').classList.remove('hidden');
+        backBtn.classList.remove('hidden');
       };
-      return { tile: tile, video: video, spk: spk };
+      return { tile: tile, video: video, rot: rot };
     }
 
     function connectCamera(cam) {
       const parts = makeTile(cam);
       grid.appendChild(parts.tile);
-      const s = { cam: cam, tile: parts.tile, video: parts.video, spk: parts.spk, peer: null, dataConn: null, call: null };
+      const s = {
+        cam: cam, tile: parts.tile, video: parts.video,
+        peer: null, dataConn: null, call: null,
+        retryTimer: null, watch: null, ro: null,
+        stopped: false, live: false, lastT: -1, stale: 0
+      };
       sessions.push(s);
 
+      // ঘোরানোর বাটন: প্রতিবার ৯০ ডিগ্রি, ক্যামেরা অনুযায়ী সেভ থাকে
+      parts.rot.onclick = (e) => {
+        e.stopPropagation();
+        cam.rot = ((cam.rot || 0) + 90) % 360;
+        saveCams();
+        layoutVideo(s);
+      };
+
+      if (window.ResizeObserver) {
+        s.ro = new ResizeObserver(() => layoutVideo(s));
+        s.ro.observe(s.tile);
+      }
+      layoutVideo(s);
+
+      // ছবি আটকে গেলে (সিগন্যাল হারালে) টাইল কালো করে আবার চেষ্টা
+      s.watch = setInterval(() => {
+        if (!s.live) return;
+        const t = s.video.currentTime;
+        if (t === s.lastT) s.stale++; else { s.stale = 0; s.lastT = t; }
+        if (s.stale >= 3) {
+          goOffline(s, 'সিগন্যাল হারিয়েছে');
+          scheduleRetry(s, false);
+        }
+      }, 5000);
+
+      openPeer(s);
+    }
+
+    function openPeer(s) {
+      if (s.stopped) return;
+      try { if (s.peer) s.peer.destroy(); } catch (e) {}
       const peer = new Peer({ config: { iceServers } });
       s.peer = peer;
 
-      peer.on('open', () => {
-        const camId = 'homecam-' + cam.code;
-
-        s.dataConn = peer.connect(camId, { reliable: true });
-        s.dataConn.on('open', () => {
-          s.dataConn.send({ type: 'sensitivity', value: Number(sens.value) });
-          s.dataConn.send({ type: 'motionOn', value: motionToggle.checked });
-        });
-        s.dataConn.on('data', (msg) => {
-          if (msg.type === 'motion') startAlarm(cam.name, s.tile);
-        });
-
-        s.call = peer.call(camId, dummyStream());
-        s.call.on('stream', (stream) => {
-          s.video.srcObject = stream;
-          s.video.play().catch(() => {});
-          setState(s, '', true);
-        });
-        s.call.on('close', () => setState(s, 'কানেকশন বন্ধ', false));
-        s.call.on('error', () => setState(s, 'কল সমস্যা', false));
-      });
+      peer.on('open', () => { if (s.peer === peer) linkCamera(s); });
 
       peer.on('error', (err) => {
-        if (err.type === 'peer-unavailable') setState(s, 'ক্যামেরা অনলাইনে নেই', false);
-        else setState(s, 'সমস্যা: ' + err.type, false);
+        if (s.peer !== peer || s.stopped) return;
+        if (err.type === 'peer-unavailable') {
+          goOffline(s, 'অফলাইন');
+          scheduleRetry(s, false);
+        } else {
+          goOffline(s, 'সংযোগ সমস্যা');
+          scheduleRetry(s, true);
+        }
       });
 
       peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
     }
 
+    function linkCamera(s) {
+      if (s.stopped || !s.peer) return;
+      clearTimeout(s.retryTimer);
+      try { if (s.call) s.call.close(); } catch (e) {}
+      try { if (s.dataConn) s.dataConn.close(); } catch (e) {}
+      const camId = 'homecam-' + s.cam.code;
+
+      const dc = s.peer.connect(camId, { reliable: true });
+      s.dataConn = dc;
+      dc.on('open', () => {
+        dc.send({ type: 'sensitivity', value: Number(sens.value) });
+        dc.send({ type: 'motionOn', value: motionToggle.checked });
+      });
+      dc.on('data', (msg) => {
+        if (msg.type === 'motion') startAlarm(s.cam.name, s.tile);
+      });
+
+      const call = s.peer.call(camId, dummyStream());
+      s.call = call;
+      call.on('stream', (stream) => {
+        if (s.call !== call) return;
+        s.video.srcObject = stream;
+        s.video.play().catch(() => {});
+        s.live = true;
+        s.stale = 0;
+        s.lastT = -1;
+        setState(s, '', true);
+        layoutVideo(s);
+      });
+      call.on('close', () => {
+        if (s.call !== call || s.stopped) return;
+        goOffline(s, 'কানেকশন বন্ধ');
+        scheduleRetry(s, false);
+      });
+      call.on('error', () => {
+        if (s.call !== call || s.stopped) return;
+        goOffline(s, 'কল সমস্যা');
+        scheduleRetry(s, false);
+      });
+
+      // ১২ সেকেন্ডে ছবি না এলে আবার চেষ্টা
+      s.retryTimer = setTimeout(() => {
+        if (!s.live && !s.stopped) { setState(s, 'অফলাইন', false); scheduleRetry(s, false); }
+      }, 12000);
+    }
+
+    function scheduleRetry(s, newPeer) {
+      if (s.stopped) return;
+      clearTimeout(s.retryTimer);
+      s.retryTimer = setTimeout(() => {
+        if (s.stopped) return;
+        if (newPeer || !s.peer || s.peer.destroyed || s.peer.disconnected) openPeer(s);
+        else linkCamera(s);
+      }, RETRY_MS);
+    }
+
+    function closeAll() {
+      sessions.forEach(s => {
+        s.stopped = true;
+        clearTimeout(s.retryTimer);
+        clearInterval(s.watch);
+        try { if (s.ro) s.ro.disconnect(); } catch (e) {}
+        try { if (s.call) s.call.close(); } catch (e) {}
+        try { if (s.dataConn) s.dataConn.close(); } catch (e) {}
+        try { if (s.peer) s.peer.destroy(); } catch (e) {}
+      });
+      sessions = [];
+      grid.innerHTML = '';
+      grid.className = '';
+    }
+
     // ---------- লাইভ দেখো ----------
-    document.getElementById('connect').onclick = () => {
+    function startViewing() {
       const chosen = cams.filter(c => c.selected !== false);
       if (!chosen.length) {
         setupMsg.textContent = 'অন্তত একটা ক্যামেরা যোগ করে টিক দাও';
         return;
       }
       setupMsg.textContent = '';
-
-      // ট্যাপের ভেতরেই অডিও চালু (বিপ আর স্ট্রিম অডিওর জন্য দরকার)
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-
+      unlockAudio();
       closeAll();
       setup.classList.add('gone');
       controls.classList.remove('hidden');
-      document.getElementById('back').classList.add('hidden');
+      backBtn.classList.add('hidden');
       grid.className = 'c' + Math.min(chosen.length, 4);
       chosen.forEach(connectCamera);
-    };
+    }
+    document.getElementById('connect').onclick = startViewing;
 
     // ---------- নেভিগেশন ----------
-    document.getElementById('back').onclick = () => {
+    backBtn.onclick = () => {
       grid.classList.remove('zoom');
       document.querySelectorAll('.tile.big').forEach(t => t.classList.remove('big'));
-      document.getElementById('back').classList.add('hidden');
+      backBtn.classList.add('hidden');
     };
-    document.getElementById('back').classList.add('hidden');
+    backBtn.classList.add('hidden');
 
     document.getElementById('manage').onclick = () => {
       closeAll();
@@ -490,6 +626,9 @@
     motionToggle.onchange = (e) => {
       broadcast({ type: 'motionOn', value: e.target.checked });
     };
+
+    // ক্যামেরা সেভ করা থাকলে অ্যাপ খুললেই নিজে থেকে চালু হবে
+    if (cams.some(c => c.selected !== false)) startViewing();
   </script>
 </body>
 </html>
