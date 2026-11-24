@@ -2,96 +2,183 @@
 <html lang="bn">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
   <title>ভিউয়ার</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; overflow: hidden; }
     body {
-      font-family: system-ui, sans-serif;
-      background: #0f172a;
-      color: #f1f5f9;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      padding: 16px;
-      transition: background 0.2s;
+      font-family: system-ui, -apple-system, 'Noto Sans Bengali', sans-serif;
+      background: #000;
+      color: #f5f5f7;
+      user-select: none;
     }
-    body.alarm { background: #7f1d1d; }
-    video { width: 100%; max-width: 700px; border-radius: 12px; background: #000; }
-    input[type=password] {
-      width: 100%; max-width: 500px; padding: 14px; font-size: 18px;
-      border-radius: 10px; border: none; text-align: center;
+    #remote { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+    /* নড়াচড়ার লাল ফ্রেম */
+    #frame {
+      position: fixed; inset: 0; z-index: 4; pointer-events: none;
+      border: 0 solid #ef4444; transition: border-width 0.15s;
     }
-    button {
-      width: 100%; max-width: 500px; padding: 14px; font-size: 18px;
-      font-weight: 600; border: none; border-radius: 10px;
-      background: #16a34a; color: white;
+    body.alarm #frame { border-width: 8px; animation: blink 0.5s infinite; }
+    @keyframes blink { 50% { border-color: #7f1d1d; } }
+
+    /* ওপরের বার */
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+      padding: max(14px, env(safe-area-inset-top)) 16px 28px;
+      background: linear-gradient(#000000cc, transparent);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
     }
-    #status { color: #fbbf24; text-align: center; }
-    .videoWrap { position: relative; width: 100%; max-width: 700px; }
-    .videoWrap video { width: 100%; }
-    #speaker {
-      position: absolute; right: 10px; bottom: 10px;
-      width: 52px; height: 52px; padding: 0; font-size: 26px;
-      border-radius: 50%; background: rgba(0,0,0,0.6); color: white;
+    #status { font-size: 15px; font-weight: 600; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      background: #ffffff1f; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border: 0; color: #fff;
     }
-    .row { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 10px; }
-    .hidden { display: none !important; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #8e8e93; }
+    .live .dot { background: #ef4444; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.25; } }
+
+    /* ডানের ভাসমান বাটন */
+    #side {
+      position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 6;
+      display: none; flex-direction: column; gap: 14px;
+    }
+    #side.on { display: flex; }
+    .round {
+      width: 54px; height: 54px; border-radius: 50%; border: 0; font-size: 24px; color: #fff;
+      background: #00000099; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    }
+    .round:active { transform: scale(0.92); }
+
+    /* নিচের কন্ট্রোল প্যানেল */
     #controls {
-      width: 100%; max-width: 500px; background: #1e293b;
-      padding: 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+      padding: 22px 18px max(18px, env(safe-area-inset-bottom));
+      background: linear-gradient(transparent, #000000e6 45%);
+      display: none; flex-direction: column; gap: 12px;
     }
-    #controls label { display: flex; justify-content: space-between; }
-    input[type=range] { width: 100%; }
+    #controls.on { display: flex; }
+    .ctl { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 15px; }
+    .ctl b { min-width: 28px; text-align: right; color: #60a5fa; }
+    input[type=range] { flex: 1; accent-color: #3b82f6; height: 28px; }
+    .switch { position: relative; width: 52px; height: 30px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0; background: #3a3a40; border-radius: 30px; transition: 0.2s;
+    }
+    .slider::before {
+      content: ''; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px;
+      background: #fff; border-radius: 50%; transition: 0.2s;
+    }
+    .switch input:checked + .slider { background: #22c55e; }
+    .switch input:checked + .slider::before { transform: translateX(22px); }
+
+    /* নড়াচড়ার অ্যালার্ট কার্ড */
     #alert {
-      width: 100%; max-width: 500px; padding: 14px; border-radius: 12px;
-      background: #dc2626; color: white; font-size: 20px; font-weight: 700;
-      text-align: center;
+      position: fixed; left: 16px; right: 16px; z-index: 8;
+      top: max(70px, calc(env(safe-area-inset-top) + 56px));
+      padding: 14px 16px; border-radius: 18px; background: #dc2626; color: #fff;
+      display: none; align-items: center; justify-content: space-between; gap: 12px;
+      box-shadow: 0 10px 40px #dc262680;
     }
-    #alert button { background: white; color: #dc2626; margin-top: 10px; }
+    #alert.on { display: flex; }
+    #alert b { display: block; font-size: 17px; }
+    #alert span { font-size: 13px; opacity: 0.9; }
+    #alert button {
+      border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 700;
+      background: #fff; color: #dc2626; font-size: 15px;
+    }
+
+    /* সেটআপ কার্ড */
+    #setup {
+      position: fixed; inset: 0; z-index: 10; background: #000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; padding: 24px; transition: opacity 0.35s;
+    }
+    #setup.gone { opacity: 0; pointer-events: none; }
+    #setup img { width: 76px; height: 76px; border-radius: 20px; box-shadow: 0 8px 40px #22c55e59; }
+    #setup h2 { font-size: 24px; }
+    .field {
+      width: 100%; max-width: 360px; padding: 16px; font-size: 18px; text-align: center;
+      border-radius: 16px; border: 1px solid #2c2c34; background: #111114; color: #fff; outline: none;
+    }
+    .field:focus { border-color: #22c55e; }
+    .btn {
+      width: 100%; max-width: 360px; padding: 16px; font-size: 17px; font-weight: 700;
+      border: 0; border-radius: 16px; color: #fff; background: #16a34a;
+    }
+    .btn:active { transform: scale(0.97); }
+    #setupMsg { color: #fbbf24; font-size: 14px; min-height: 20px; text-align: center; }
   </style>
 </head>
 <body>
-  <h2>👀 ভিউয়ার মোড</h2>
+  <video id="remote" autoplay muted playsinline></video>
+  <div id="frame"></div>
 
-  <div class="row" id="setup">
-    <input id="code" type="password" autocomplete="off" placeholder="ক্যামেরার গোপন কোড দাও">
-    <button id="connect">লাইভ দেখো</button>
+  <div id="topbar">
+    <div id="status">ভিউয়ার</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="pill" id="clock"></div>
+      <div class="pill" id="livePill"><span class="dot"></span><span id="liveTxt">অফলাইন</span></div>
+    </div>
   </div>
 
-  <div id="alert" class="hidden">
-    ⚠️ নড়াচড়া ধরা পড়েছে!
-    <div id="alertTime" style="font-size:14px;font-weight:400"></div>
-    <button id="stopAlarm">অ্যালার্ম বন্ধ করো</button>
+  <div id="alert">
+    <div><b>⚠️ নড়াচড়া ধরা পড়েছে</b><span id="alertTime"></span></div>
+    <button id="stopAlarm">বন্ধ করো</button>
   </div>
 
-  <div class="videoWrap">
-    <video id="remote" autoplay muted playsinline></video>
-    <button id="speaker" title="শব্দ চালু/বন্ধ">🔇</button>
+  <div id="side">
+    <button class="round" id="speaker" title="শব্দ চালু/বন্ধ">🔇</button>
+    <button class="round" id="full" title="ফুলস্ক্রিন">⛶</button>
   </div>
-  <div id="status">কোড লিখে বাটনে চাপো</div>
 
-  <div id="controls" class="hidden">
-    <label>
-      <span>মোশন সেনসিটিভিটি</span>
-      <span id="sensVal">50</span>
-    </label>
-    <input id="sens" type="range" min="1" max="100" value="50">
-    <label>
-      <span>মোশন অ্যালার্ট চালু</span>
-      <input id="motionToggle" type="checkbox" checked>
-    </label>
+  <div id="controls">
+    <div class="ctl">
+      <span>🎯 সেনসিটিভিটি</span>
+      <input id="sens" type="range" min="1" max="100" value="50">
+      <b id="sensVal">50</b>
+    </div>
+    <div class="ctl">
+      <span>🔔 মোশন অ্যালার্ট</span>
+      <label class="switch">
+        <input id="motionToggle" type="checkbox" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div id="setup">
+    <img src="icon.svg" alt="">
+    <h2>ভিউয়ার মোড</h2>
+    <input id="code" class="field" type="password" autocomplete="off" placeholder="ক্যামেরার গোপন কোড দাও">
+    <button id="connect" class="btn">লাইভ দেখো</button>
+    <div id="setupMsg"></div>
   </div>
 
   <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
     const statusEl = document.getElementById('status');
     const remote = document.getElementById('remote');
     const setup = document.getElementById('setup');
+    const setupMsg = document.getElementById('setupMsg');
     const controls = document.getElementById('controls');
+    const side = document.getElementById('side');
     const alertBox = document.getElementById('alert');
+    const livePill = document.getElementById('livePill');
+    const liveTxt = document.getElementById('liveTxt');
     let peer, currentCall, dataConn, audioCtx, alarmTimer;
 
     const iceServers = [
@@ -99,6 +186,16 @@
       { urls: 'stun:stun1.l.google.com:19302' }
       // মোবাইল ডেটায় কানেক্ট না হলে এখানে TURN সার্ভার যোগ করবে
     ];
+
+    function setLive(on, txt) {
+      livePill.classList.toggle('live', on);
+      liveTxt.textContent = txt;
+    }
+
+    // ঘড়ি
+    setInterval(() => {
+      document.getElementById('clock').textContent = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+    }, 1000);
 
     function dummyStream() {
       const c = document.createElement('canvas');
@@ -135,7 +232,7 @@
     }
 
     function startAlarm() {
-      alertBox.classList.remove('hidden');
+      alertBox.classList.add('on');
       document.body.classList.add('alarm');
       document.getElementById('alertTime').textContent =
         new Date().toLocaleTimeString('bn-BD');
@@ -144,7 +241,6 @@
 
       clearInterval(alarmTimer);
       let n = 0;
-      // বিপ বিপ বিপ, প্রতি ১ সেকেন্ডে তিনবার করে
       alarmTimer = setInterval(() => {
         beep(n % 2 === 0 ? 880 : 660);
         n++;
@@ -158,7 +254,7 @@
 
     function stopAlarm() {
       clearInterval(alarmTimer);
-      alertBox.classList.add('hidden');
+      alertBox.classList.remove('on');
       document.body.classList.remove('alarm');
       if (navigator.vibrate) navigator.vibrate(0);
     }
@@ -170,6 +266,12 @@
       remote.muted = !remote.muted;
       speakerBtn.textContent = remote.muted ? '🔇' : '🔊';
       remote.play().catch(() => {});
+    };
+
+    // ---------- ফুলস্ক্রিন ----------
+    document.getElementById('full').onclick = () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
     };
 
     // ---------- স্লাইডার ও টগল ----------
@@ -191,15 +293,15 @@
       const input = document.getElementById('code');
       const code = input.value.trim();
       if (code.length < 6) {
-        statusEl.textContent = 'কোড অন্তত ৬ অক্ষরের দাও';
+        setupMsg.textContent = 'কোড অন্তত ৬ অক্ষরের দাও';
         return;
       }
+      setupMsg.textContent = '';
 
-      // বাটন চাপার সাথে সাথেই কোড মুছে ইনপুট লুকাও
+      // কোড নেওয়ার সাথে সাথেই ইনপুট মুছে সেটআপ কার্ড লুকিয়ে ফেলো
       input.value = '';
-      setup.classList.add('hidden');
+      setup.classList.add('gone');
 
-      // বিপ বাজাতে ব্রাউজারে ইউজারের ট্যাপের ভেতরেই অডিও চালু করতে হয়
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
@@ -207,50 +309,57 @@
 
       if (peer) peer.destroy();
       statusEl.textContent = 'কানেক্ট হচ্ছে...';
+      setLive(false, 'সংযোগ হচ্ছে');
 
       peer = new Peer({ config: { iceServers } });
 
       peer.on('open', () => {
         const camId = 'homecam-' + code;
 
-        // ডেটা চ্যানেল (মোশন সংকেত আসবে, সেনসিটিভিটি যাবে)
         dataConn = peer.connect(camId, { reliable: true });
         dataConn.on('open', () => {
-          controls.classList.remove('hidden');
+          controls.classList.add('on');
+          side.classList.add('on');
           dataConn.send({ type: 'sensitivity', value: Number(sens.value) });
         });
         dataConn.on('data', (msg) => {
           if (msg.type === 'motion') startAlarm();
         });
 
-        // ভিডিও কল
         currentCall = peer.call(camId, dummyStream());
 
         currentCall.on('stream', (stream) => {
           remote.srcObject = stream;
           remote.muted = (speakerBtn.textContent === '🔇');
           remote.play().catch(() => {});
-          statusEl.textContent = '🔴 লাইভ চলছে';
+          statusEl.textContent = 'বাসার ক্যামেরা';
+          setLive(true, 'লাইভ');
         });
 
         currentCall.on('close', () => {
           statusEl.textContent = 'কানেকশন বন্ধ হয়ে গেছে';
-          setup.classList.remove('hidden');
+          setLive(false, 'অফলাইন');
+          setup.classList.remove('gone');
+          controls.classList.remove('on');
+          side.classList.remove('on');
         });
 
         currentCall.on('error', (e) => {
           statusEl.textContent = 'কল সমস্যা: ' + e;
-          setup.classList.remove('hidden');
+          setLive(false, 'অফলাইন');
+          setup.classList.remove('gone');
         });
       });
 
       peer.on('error', (err) => {
         if (err.type === 'peer-unavailable') {
-          statusEl.textContent = 'ক্যামেরা অনলাইনে নেই বা কোড ভুল';
+          setupMsg.textContent = 'ক্যামেরা অনলাইনে নেই বা কোড ভুল';
         } else {
-          statusEl.textContent = 'সমস্যা: ' + err.type;
+          setupMsg.textContent = 'সমস্যা: ' + err.type;
         }
-        setup.classList.remove('hidden');
+        statusEl.textContent = 'ভিউয়ার';
+        setLive(false, 'অফলাইন');
+        setup.classList.remove('gone');
       });
     };
   </script>
