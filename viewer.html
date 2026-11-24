@@ -21,62 +21,80 @@
       color: #f5f5f7;
       user-select: none;
     }
-    #remote { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
-
-    /* নড়াচড়ার লাল ফ্রেম */
-    #frame {
-      position: fixed; inset: 0; z-index: 4; pointer-events: none;
-      border: 0 solid #ef4444; transition: border-width 0.15s;
-    }
-    body.alarm #frame { border-width: 8px; animation: blink 0.5s infinite; }
-    @keyframes blink { 50% { border-color: #7f1d1d; } }
+    .hidden { display: none !important; }
 
     /* ওপরের বার */
     #topbar {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 5;
-      padding: max(14px, env(safe-area-inset-top)) 16px 28px;
-      background: linear-gradient(#000000cc, transparent);
+      position: fixed; top: 0; left: 0; right: 0; z-index: 12;
+      padding: max(12px, env(safe-area-inset-top)) 14px 10px;
+      background: #000000d9;
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
     }
-    #status { font-size: 15px; font-weight: 600; }
+    #title { font-size: 17px; font-weight: 700; }
     .pill {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
-      background: #ffffff1f; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-      border: 0; color: #fff;
+      padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      background: #ffffff1f; border: 0; color: #fff;
     }
-    .dot { width: 9px; height: 9px; border-radius: 50%; background: #8e8e93; }
-    .live .dot { background: #ef4444; animation: pulse 1.2s infinite; }
-    @keyframes pulse { 50% { opacity: 0.25; } }
+    .pill:active { transform: scale(0.95); }
 
-    /* ডানের ভাসমান বাটন */
-    #side {
-      position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 6;
-      display: none; flex-direction: column; gap: 14px;
+    /* ক্যামেরার গ্রিড */
+    #grid {
+      position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 1;
+      padding: calc(max(12px, env(safe-area-inset-top)) + 52px) 6px calc(max(14px, env(safe-area-inset-bottom)) + 150px);
+      display: grid; gap: 6px;
+      grid-template-columns: 1fr;
+      grid-auto-rows: 1fr;
     }
-    #side.on { display: flex; }
-    .round {
-      width: 54px; height: 54px; border-radius: 50%; border: 0; font-size: 24px; color: #fff;
-      background: #00000099; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    #grid.c2 { grid-template-columns: 1fr; }
+    #grid.c3, #grid.c4 { grid-template-columns: 1fr 1fr; }
+    @media (orientation: landscape) {
+      #grid.c2 { grid-template-columns: 1fr 1fr; }
+      #grid.c3, #grid.c4 { grid-template-columns: 1fr 1fr 1fr; }
     }
-    .round:active { transform: scale(0.92); }
+    .tile {
+      position: relative; background: #0b0b0e; border-radius: 14px; overflow: hidden;
+      border: 2px solid #1c1c22; min-height: 0;
+    }
+    .tile video { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
+    .tile.alarm { border-color: #ef4444; animation: blink 0.5s infinite; }
+    @keyframes blink { 50% { border-color: #7f1d1d; } }
+    .tile .label {
+      position: absolute; left: 8px; top: 8px; padding: 4px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; background: #000000a6; display: flex; gap: 6px; align-items: center;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; }
+    .tile.live .dot { background: #ef4444; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.25; } }
+    .tile .state {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #8e8e93; font-size: 14px; text-align: center; padding: 10px; pointer-events: none;
+    }
+    .tile.live .state { display: none; }
+    .tile .spk {
+      position: absolute; right: 8px; bottom: 8px; width: 42px; height: 42px; border-radius: 50%;
+      border: 0; background: #000000a6; font-size: 19px; color: #fff;
+    }
+
+    /* বড় করা ক্যামেরা */
+    #grid.zoom { display: block; padding: calc(max(12px, env(safe-area-inset-top)) + 52px) 0 calc(max(14px, env(safe-area-inset-bottom)) + 150px); }
+    #grid.zoom .tile { display: none; border-radius: 0; }
+    #grid.zoom .tile.big { display: block; width: 100%; height: 100%; }
+    #grid.zoom .tile.big video { object-fit: contain; }
 
     /* নিচের কন্ট্রোল প্যানেল */
     #controls {
-      position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
-      padding: 22px 18px max(18px, env(safe-area-inset-bottom));
-      background: linear-gradient(transparent, #000000e6 45%);
-      display: none; flex-direction: column; gap: 12px;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 12;
+      padding: 14px 18px max(16px, env(safe-area-inset-bottom));
+      background: #000000e6;
+      display: flex; flex-direction: column; gap: 12px;
     }
-    #controls.on { display: flex; }
     .ctl { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 15px; }
     .ctl b { min-width: 28px; text-align: right; color: #60a5fa; }
     input[type=range] { flex: 1; accent-color: #3b82f6; height: 28px; }
     .switch { position: relative; width: 52px; height: 30px; flex: none; }
     .switch input { opacity: 0; width: 0; height: 0; }
-    .slider {
-      position: absolute; inset: 0; background: #3a3a40; border-radius: 30px; transition: 0.2s;
-    }
+    .slider { position: absolute; inset: 0; background: #3a3a40; border-radius: 30px; transition: 0.2s; }
     .slider::before {
       content: ''; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px;
       background: #fff; border-radius: 50%; transition: 0.2s;
@@ -86,8 +104,8 @@
 
     /* নড়াচড়ার অ্যালার্ট কার্ড */
     #alert {
-      position: fixed; left: 16px; right: 16px; z-index: 8;
-      top: max(70px, calc(env(safe-area-inset-top) + 56px));
+      position: fixed; left: 14px; right: 14px; z-index: 14;
+      top: calc(max(12px, env(safe-area-inset-top)) + 56px);
       padding: 14px 16px; border-radius: 18px; background: #dc2626; color: #fff;
       display: none; align-items: center; justify-content: space-between; gap: 12px;
       box-shadow: 0 10px 40px #dc262680;
@@ -100,51 +118,62 @@
       background: #fff; color: #dc2626; font-size: 15px;
     }
 
-    /* সেটআপ কার্ড */
+    /* সেটআপ / ক্যামেরা তালিকা */
     #setup {
-      position: fixed; inset: 0; z-index: 10; background: #000;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 16px; padding: 24px; transition: opacity 0.35s;
+      position: fixed; inset: 0; z-index: 20; background: #000; overflow-y: auto;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 14px; padding: max(28px, env(safe-area-inset-top)) 20px 30px;
+      transition: opacity 0.35s;
     }
     #setup.gone { opacity: 0; pointer-events: none; }
-    #setup img { width: 76px; height: 76px; border-radius: 20px; box-shadow: 0 8px 40px #22c55e59; }
-    #setup h2 { font-size: 24px; }
+    #setup img { width: 70px; height: 70px; border-radius: 18px; box-shadow: 0 8px 40px #22c55e59; margin-top: 10px; }
+    #setup h2 { font-size: 23px; }
+    #setup p { color: #8e8e93; font-size: 14px; text-align: center; }
+    #saved { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; }
+    .cam {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+      border-radius: 16px; background: #111114; border: 1px solid #222228;
+    }
+    .cam input[type=checkbox] { width: 22px; height: 22px; accent-color: #22c55e; flex: none; }
+    .cam .nm { flex: 1; font-size: 17px; font-weight: 600; }
+    .cam .cd { color: #636366; font-size: 13px; letter-spacing: 2px; }
+    .cam button { border: 0; background: #2a1215; color: #f87171; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+    .addbox {
+      width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px;
+      padding: 14px; border-radius: 18px; background: #0d0d10; border: 1px dashed #2c2c34;
+    }
     .field {
-      width: 100%; max-width: 360px; padding: 16px; font-size: 18px; text-align: center;
-      border-radius: 16px; border: 1px solid #2c2c34; background: #111114; color: #fff; outline: none;
+      width: 100%; padding: 14px; font-size: 17px; text-align: center;
+      border-radius: 14px; border: 1px solid #2c2c34; background: #111114; color: #fff; outline: none;
     }
     .field:focus { border-color: #22c55e; }
     .btn {
-      width: 100%; max-width: 360px; padding: 16px; font-size: 17px; font-weight: 700;
+      width: 100%; max-width: 380px; padding: 15px; font-size: 17px; font-weight: 700;
       border: 0; border-radius: 16px; color: #fff; background: #16a34a;
     }
+    .btn.ghost { background: #1c1c22; color: #60a5fa; max-width: none; }
     .btn:active { transform: scale(0.97); }
-    #setupMsg { color: #fbbf24; font-size: 14px; min-height: 20px; text-align: center; }
+    #setupMsg { color: #fbbf24; font-size: 14px; min-height: 18px; text-align: center; }
   </style>
 </head>
 <body>
-  <video id="remote" autoplay muted playsinline></video>
-  <div id="frame"></div>
-
   <div id="topbar">
-    <div id="status">ভিউয়ার</div>
+    <div id="title">👀 ভিউয়ার</div>
     <div style="display:flex;gap:8px;align-items:center">
       <div class="pill" id="clock"></div>
-      <div class="pill" id="livePill"><span class="dot"></span><span id="liveTxt">অফলাইন</span></div>
+      <button class="pill" id="back">⬅ গ্রিড</button>
+      <button class="pill" id="manage">⚙️ ক্যামেরা</button>
     </div>
   </div>
 
   <div id="alert">
-    <div><b>⚠️ নড়াচড়া ধরা পড়েছে</b><span id="alertTime"></span></div>
+    <div><b>⚠️ নড়াচড়া ধরা পড়েছে</b><span id="alertText"></span></div>
     <button id="stopAlarm">বন্ধ করো</button>
   </div>
 
-  <div id="side">
-    <button class="round" id="speaker" title="শব্দ চালু/বন্ধ">🔇</button>
-    <button class="round" id="full" title="ফুলস্ক্রিন">⛶</button>
-  </div>
+  <div id="grid"></div>
 
-  <div id="controls">
+  <div id="controls" class="hidden">
     <div class="ctl">
       <span>🎯 সেনসিটিভিটি</span>
       <input id="sens" type="range" min="1" max="100" value="50">
@@ -161,25 +190,32 @@
 
   <div id="setup">
     <img src="icon.svg" alt="">
-    <h2>ভিউয়ার মোড</h2>
-    <input id="code" class="field" type="password" autocomplete="off" placeholder="ক্যামেরার গোপন কোড দাও">
-    <button id="connect" class="btn">লাইভ দেখো</button>
+    <h2>আমার ক্যামেরা</h2>
+    <p>প্রতিটা ক্যামেরা ফোনে আলাদা গোপন কোড দিয়ে চালু করতে হবে। এখানে নাম আর কোড একবার সেভ করলে পরেরবার শুধু একটা বাটনে সব চালু হবে।</p>
+
+    <div id="saved"></div>
+
+    <div class="addbox">
+      <input id="newName" class="field" type="text" placeholder="ক্যামেরার নাম (যেমন: বারান্দা)" autocomplete="off">
+      <input id="newCode" class="field" type="password" placeholder="ক্যামেরার গোপন কোড" autocomplete="off">
+      <button id="addBtn" class="btn ghost">➕ ক্যামেরা যোগ করো</button>
+    </div>
+
     <div id="setupMsg"></div>
+    <button id="connect" class="btn">লাইভ দেখো</button>
   </div>
 
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-    const statusEl = document.getElementById('status');
-    const remote = document.getElementById('remote');
+    const STORE_KEY = 'homecam-cameras-v1';
+    const grid = document.getElementById('grid');
     const setup = document.getElementById('setup');
     const setupMsg = document.getElementById('setupMsg');
     const controls = document.getElementById('controls');
-    const side = document.getElementById('side');
     const alertBox = document.getElementById('alert');
-    const livePill = document.getElementById('livePill');
-    const liveTxt = document.getElementById('liveTxt');
-    let peer, currentCall, dataConn, audioCtx, alarmTimer;
+    const sens = document.getElementById('sens');
+    const motionToggle = document.getElementById('motionToggle');
 
     const iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -187,24 +223,74 @@
       // মোবাইল ডেটায় কানেক্ট না হলে এখানে TURN সার্ভার যোগ করবে
     ];
 
-    function setLive(on, txt) {
-      livePill.classList.toggle('live', on);
-      liveTxt.textContent = txt;
-    }
+    // ---------- সেভ করা ক্যামেরার তালিকা ----------
+    // ফোনের ব্রাউজারেই জমা থাকে, কোথাও পাঠানো হয় না। selected = এবার দেখানো হবে কিনা
+    let cams = [];
+    try { cams = JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch (e) { cams = []; }
+    function saveCams() { localStorage.setItem(STORE_KEY, JSON.stringify(cams)); }
 
-    // ঘড়ি
+    function renderSaved() {
+      const box = document.getElementById('saved');
+      box.innerHTML = '';
+      if (!cams.length) {
+        box.innerHTML = '<p>এখনো কোনো ক্যামেরা যোগ করা হয়নি</p>';
+        return;
+      }
+      cams.forEach((c, i) => {
+        const row = document.createElement('div');
+        row.className = 'cam';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = c.selected !== false;
+        cb.onchange = () => { c.selected = cb.checked; saveCams(); };
+        const nm = document.createElement('div');
+        nm.className = 'nm';
+        nm.textContent = c.name;
+        const cd = document.createElement('div');
+        cd.className = 'cd';
+        cd.textContent = '••••••';
+        const del = document.createElement('button');
+        del.textContent = 'মুছো';
+        del.onclick = () => { cams.splice(i, 1); saveCams(); renderSaved(); };
+        row.append(cb, nm, cd, del);
+        box.appendChild(row);
+      });
+    }
+    renderSaved();
+
+    document.getElementById('addBtn').onclick = () => {
+      const nameEl = document.getElementById('newName');
+      const codeEl = document.getElementById('newCode');
+      const name = nameEl.value.trim();
+      const code = codeEl.value.trim();
+      if (!name) { setupMsg.textContent = 'ক্যামেরার একটা নাম দাও'; return; }
+      if (code.length < 6) { setupMsg.textContent = 'কোড অন্তত ৬ অক্ষরের দাও'; return; }
+      if (cams.length >= 4) { setupMsg.textContent = 'সর্বোচ্চ ৪টা ক্যামেরা যোগ করা যাবে'; return; }
+      if (cams.some(c => c.code === code)) { setupMsg.textContent = 'এই কোড আগেই যোগ করা আছে'; return; }
+      cams.push({ name: name, code: code, selected: true });
+      saveCams();
+      // যোগ করার সাথে সাথেই ইনপুট খালি, কোড স্ক্রিনে থাকে না
+      nameEl.value = '';
+      codeEl.value = '';
+      setupMsg.textContent = '';
+      renderSaved();
+    };
+
+    // ---------- ঘড়ি ----------
     setInterval(() => {
-      document.getElementById('clock').textContent = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('clock').textContent =
+        new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
     }, 1000);
 
+    // ---------- নীরব অডিও ট্র্যাকসহ ডামি স্ট্রিম ----------
+    let sharedAudioCtx = null;
     function dummyStream() {
       const c = document.createElement('canvas');
       c.width = 2; c.height = 2;
       c.getContext('2d').fillRect(0, 0, 2, 2);
       const s = c.captureStream(1);
-      // কলে অডিও অংশ খোলার জন্য একটা নীরব অডিও ট্র্যাকও পাঠানো হয়
       try {
-        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const ac = sharedAudioCtx || (sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)());
         const dest = ac.createMediaStreamDestination();
         const o = ac.createOscillator();
         const g = ac.createGain();
@@ -218,149 +304,191 @@
     }
 
     // ---------- বিপ শব্দ ----------
-    function beep(freq = 880, duration = 0.18) {
+    let audioCtx = null;
+    let alarmTimer = null;
+    function beep(freq, duration) {
       if (!audioCtx) return;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'square';
-      osc.frequency.value = freq;
+      osc.frequency.value = freq || 880;
       gain.gain.value = 0.25;
       osc.connect(gain);
       gain.connect(audioCtx.destination);
       osc.start();
-      osc.stop(audioCtx.currentTime + duration);
+      osc.stop(audioCtx.currentTime + (duration || 0.18));
     }
 
-    function startAlarm() {
+    function startAlarm(camName, tile) {
       alertBox.classList.add('on');
-      document.body.classList.add('alarm');
-      document.getElementById('alertTime').textContent =
-        new Date().toLocaleTimeString('bn-BD');
+      document.getElementById('alertText').textContent =
+        camName + ' · ' + new Date().toLocaleTimeString('bn-BD');
+      tile.classList.add('alarm');
+      clearTimeout(tile._alarmOff);
+      tile._alarmOff = setTimeout(() => tile.classList.remove('alarm'), 6000);
 
       if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
 
       clearInterval(alarmTimer);
       let n = 0;
       alarmTimer = setInterval(() => {
-        beep(n % 2 === 0 ? 880 : 660);
+        beep(n % 2 === 0 ? 880 : 660, 0.18);
         n++;
         if (n >= 6) clearInterval(alarmTimer);
       }, 220);
 
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('⚠️ নড়াচড়া ধরা পড়েছে', { body: 'ক্যামেরার সামনে কিছু নড়ছে' });
+        new Notification('⚠️ নড়াচড়া ধরা পড়েছে', { body: camName + ' ক্যামেরার সামনে কিছু নড়ছে' });
       }
     }
 
-    function stopAlarm() {
+    document.getElementById('stopAlarm').onclick = () => {
       clearInterval(alarmTimer);
       alertBox.classList.remove('on');
-      document.body.classList.remove('alarm');
+      document.querySelectorAll('.tile.alarm').forEach(t => t.classList.remove('alarm'));
       if (navigator.vibrate) navigator.vibrate(0);
+    };
+
+    // ---------- সংযোগ: প্রতিটা ক্যামেরার জন্য আলাদা Peer ----------
+    let sessions = [];   // { cam, peer, dataConn, call, tile, video, spk }
+
+    function closeAll() {
+      sessions.forEach(s => {
+        try { s.call && s.call.close(); } catch (e) {}
+        try { s.dataConn && s.dataConn.close(); } catch (e) {}
+        try { s.peer && s.peer.destroy(); } catch (e) {}
+      });
+      sessions = [];
+      grid.innerHTML = '';
+      grid.className = '';
     }
-    document.getElementById('stopAlarm').onclick = stopAlarm;
 
-    // ---------- স্পিকার (শব্দ চালু/বন্ধ) ----------
-    const speakerBtn = document.getElementById('speaker');
-    speakerBtn.onclick = () => {
-      remote.muted = !remote.muted;
-      speakerBtn.textContent = remote.muted ? '🔇' : '🔊';
-      remote.play().catch(() => {});
-    };
+    function setState(s, text, live) {
+      s.tile.classList.toggle('live', !!live);
+      s.tile.querySelector('.state').textContent = text;
+    }
 
-    // ---------- ফুলস্ক্রিন ----------
-    document.getElementById('full').onclick = () => {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-    };
+    function makeTile(cam) {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      const video = document.createElement('video');
+      video.autoplay = true; video.muted = true; video.playsInline = true;
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.innerHTML = '<span class="dot"></span>';
+      const nm = document.createElement('span');
+      nm.textContent = cam.name;
+      label.appendChild(nm);
+      const state = document.createElement('div');
+      state.className = 'state';
+      state.textContent = 'সংযোগ হচ্ছে...';
+      const spk = document.createElement('button');
+      spk.className = 'spk';
+      spk.textContent = '🔇';
+      spk.onclick = (e) => {
+        e.stopPropagation();
+        video.muted = !video.muted;
+        spk.textContent = video.muted ? '🔇' : '🔊';
+        video.play().catch(() => {});
+      };
+      tile.append(video, label, state, spk);
+      tile.onclick = () => {
+        if (grid.classList.contains('zoom')) return;
+        grid.classList.add('zoom');
+        tile.classList.add('big');
+        document.getElementById('back').classList.remove('hidden');
+      };
+      return { tile: tile, video: video, spk: spk };
+    }
 
-    // ---------- স্লাইডার ও টগল ----------
-    const sens = document.getElementById('sens');
-    sens.oninput = () => {
-      document.getElementById('sensVal').textContent = sens.value;
-      if (dataConn && dataConn.open) {
-        dataConn.send({ type: 'sensitivity', value: Number(sens.value) });
-      }
-    };
-    document.getElementById('motionToggle').onchange = (e) => {
-      if (dataConn && dataConn.open) {
-        dataConn.send({ type: 'motionOn', value: e.target.checked });
-      }
-    };
+    function connectCamera(cam) {
+      const parts = makeTile(cam);
+      grid.appendChild(parts.tile);
+      const s = { cam: cam, tile: parts.tile, video: parts.video, spk: parts.spk, peer: null, dataConn: null, call: null };
+      sessions.push(s);
 
-    // ---------- কানেক্ট ----------
+      const peer = new Peer({ config: { iceServers } });
+      s.peer = peer;
+
+      peer.on('open', () => {
+        const camId = 'homecam-' + cam.code;
+
+        s.dataConn = peer.connect(camId, { reliable: true });
+        s.dataConn.on('open', () => {
+          s.dataConn.send({ type: 'sensitivity', value: Number(sens.value) });
+          s.dataConn.send({ type: 'motionOn', value: motionToggle.checked });
+        });
+        s.dataConn.on('data', (msg) => {
+          if (msg.type === 'motion') startAlarm(cam.name, s.tile);
+        });
+
+        s.call = peer.call(camId, dummyStream());
+        s.call.on('stream', (stream) => {
+          s.video.srcObject = stream;
+          s.video.play().catch(() => {});
+          setState(s, '', true);
+        });
+        s.call.on('close', () => setState(s, 'কানেকশন বন্ধ', false));
+        s.call.on('error', () => setState(s, 'কল সমস্যা', false));
+      });
+
+      peer.on('error', (err) => {
+        if (err.type === 'peer-unavailable') setState(s, 'ক্যামেরা অনলাইনে নেই', false);
+        else setState(s, 'সমস্যা: ' + err.type, false);
+      });
+
+      peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+    }
+
+    // ---------- লাইভ দেখো ----------
     document.getElementById('connect').onclick = () => {
-      const input = document.getElementById('code');
-      const code = input.value.trim();
-      if (code.length < 6) {
-        setupMsg.textContent = 'কোড অন্তত ৬ অক্ষরের দাও';
+      const chosen = cams.filter(c => c.selected !== false);
+      if (!chosen.length) {
+        setupMsg.textContent = 'অন্তত একটা ক্যামেরা যোগ করে টিক দাও';
         return;
       }
       setupMsg.textContent = '';
 
-      // কোড নেওয়ার সাথে সাথেই ইনপুট মুছে সেটআপ কার্ড লুকিয়ে ফেলো
-      input.value = '';
-      setup.classList.add('gone');
-
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      // ট্যাপের ভেতরেই অডিও চালু (বিপ আর স্ট্রিম অডিওর জন্য দরকার)
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
       if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
       }
 
-      if (peer) peer.destroy();
-      statusEl.textContent = 'কানেক্ট হচ্ছে...';
-      setLive(false, 'সংযোগ হচ্ছে');
+      closeAll();
+      setup.classList.add('gone');
+      controls.classList.remove('hidden');
+      document.getElementById('back').classList.add('hidden');
+      grid.className = 'c' + Math.min(chosen.length, 4);
+      chosen.forEach(connectCamera);
+    };
 
-      peer = new Peer({ config: { iceServers } });
+    // ---------- নেভিগেশন ----------
+    document.getElementById('back').onclick = () => {
+      grid.classList.remove('zoom');
+      document.querySelectorAll('.tile.big').forEach(t => t.classList.remove('big'));
+      document.getElementById('back').classList.add('hidden');
+    };
+    document.getElementById('back').classList.add('hidden');
 
-      peer.on('open', () => {
-        const camId = 'homecam-' + code;
+    document.getElementById('manage').onclick = () => {
+      closeAll();
+      controls.classList.add('hidden');
+      renderSaved();
+      setup.classList.remove('gone');
+    };
 
-        dataConn = peer.connect(camId, { reliable: true });
-        dataConn.on('open', () => {
-          controls.classList.add('on');
-          side.classList.add('on');
-          dataConn.send({ type: 'sensitivity', value: Number(sens.value) });
-        });
-        dataConn.on('data', (msg) => {
-          if (msg.type === 'motion') startAlarm();
-        });
-
-        currentCall = peer.call(camId, dummyStream());
-
-        currentCall.on('stream', (stream) => {
-          remote.srcObject = stream;
-          remote.muted = (speakerBtn.textContent === '🔇');
-          remote.play().catch(() => {});
-          statusEl.textContent = 'বাসার ক্যামেরা';
-          setLive(true, 'লাইভ');
-        });
-
-        currentCall.on('close', () => {
-          statusEl.textContent = 'কানেকশন বন্ধ হয়ে গেছে';
-          setLive(false, 'অফলাইন');
-          setup.classList.remove('gone');
-          controls.classList.remove('on');
-          side.classList.remove('on');
-        });
-
-        currentCall.on('error', (e) => {
-          statusEl.textContent = 'কল সমস্যা: ' + e;
-          setLive(false, 'অফলাইন');
-          setup.classList.remove('gone');
-        });
-      });
-
-      peer.on('error', (err) => {
-        if (err.type === 'peer-unavailable') {
-          setupMsg.textContent = 'ক্যামেরা অনলাইনে নেই বা কোড ভুল';
-        } else {
-          setupMsg.textContent = 'সমস্যা: ' + err.type;
-        }
-        statusEl.textContent = 'ভিউয়ার';
-        setLive(false, 'অফলাইন');
-        setup.classList.remove('gone');
-      });
+    // ---------- স্লাইডার ও টগল (সব ক্যামেরায় একসাথে যায়) ----------
+    function broadcast(msg) {
+      sessions.forEach(s => { if (s.dataConn && s.dataConn.open) s.dataConn.send(msg); });
+    }
+    sens.oninput = () => {
+      document.getElementById('sensVal').textContent = sens.value;
+      broadcast({ type: 'sensitivity', value: Number(sens.value) });
+    };
+    motionToggle.onchange = (e) => {
+      broadcast({ type: 'motionOn', value: e.target.checked });
     };
   </script>
 </body>
