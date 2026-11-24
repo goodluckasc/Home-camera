@@ -104,7 +104,20 @@
       const c = document.createElement('canvas');
       c.width = 2; c.height = 2;
       c.getContext('2d').fillRect(0, 0, 2, 2);
-      return c.captureStream(1);
+      const s = c.captureStream(1);
+      // কলে অডিও অংশ খোলার জন্য একটা নীরব অডিও ট্র্যাকও পাঠানো হয়
+      try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const dest = ac.createMediaStreamDestination();
+        const o = ac.createOscillator();
+        const g = ac.createGain();
+        g.gain.value = 0;
+        o.connect(g);
+        g.connect(dest);
+        o.start();
+        dest.stream.getAudioTracks().forEach(t => s.addTrack(t));
+      } catch (e) { console.log('নীরব অডিও ট্র্যাক হয়নি', e); }
+      return s;
     }
 
     // ---------- বিপ শব্দ ----------
@@ -215,6 +228,7 @@
 
         currentCall.on('stream', (stream) => {
           remote.srcObject = stream;
+          remote.muted = (speakerBtn.textContent === '🔇');
           remote.play().catch(() => {});
           statusEl.textContent = '🔴 লাইভ চলছে';
         });
