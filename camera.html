@@ -210,7 +210,7 @@
     // ================= ইভেন্ট রেকর্ডিং =================
     // ক্যামেরা সারাক্ষণ ৮ সেকেন্ডের টুকরায় রেকর্ড করে, শুধু মেমোরিতে রাখে।
     // নড়াচড়া ধরা পড়লে আগের টুকরা + বর্তমান টুকরা + নড়াচড়া থামার ১৫ সেকেন্ড পর্যন্ত টুকরাগুলো ড্রাইভে যায়।
-    const recMime = ['video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+    const recMime = ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
       .find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
     const recExt = recMime && recMime.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
     let recording = false;
@@ -231,7 +231,7 @@
       if (!recording || !stream) return;
       const chunks = [];
       const startTime = Date.now();
-      const rec = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 600000 });
+      const rec = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 600000, audioBitsPerSecond: 64000 });
       rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
         onSegmentEnd(new Blob(chunks, { type: recMime }), startTime);
@@ -322,7 +322,7 @@
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: 1280, height: 720 },
-          audio: false
+          audio: { echoCancellation: true, noiseSuppression: true }
         });
       } catch (err) {
         statusEl.textContent = 'ক্যামেরা পারমিশন পাওয়া যায়নি: ' + err.message;
