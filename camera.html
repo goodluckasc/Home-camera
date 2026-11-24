@@ -2,71 +2,132 @@
 <html lang="bn">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
   <title>ক্যামেরা</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; overflow: hidden; }
     body {
-      font-family: system-ui, sans-serif;
-      background: #0f172a;
-      color: #f1f5f9;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      padding: 16px;
+      font-family: system-ui, -apple-system, 'Noto Sans Bengali', sans-serif;
+      background: #000;
+      color: #f5f5f7;
+      user-select: none;
     }
-    video { width: 100%; max-width: 500px; border-radius: 12px; background: #000; }
-    input {
-      width: 100%; max-width: 500px; padding: 14px; font-size: 18px;
-      border-radius: 10px; border: none; text-align: center;
+    #preview { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+
+    /* ওপরের স্ট্যাটাস বার */
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+      padding: max(14px, env(safe-area-inset-top)) 16px 28px;
+      background: linear-gradient(#000000cc, transparent);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
     }
-    button {
-      width: 100%; max-width: 500px; padding: 14px; font-size: 18px;
-      font-weight: 600; border: none; border-radius: 10px;
-      background: #2563eb; color: white;
+    #status { font-size: 15px; font-weight: 600; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      background: #ffffff1f; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     }
-    button.drive { background: #475569; }
-    #status { color: #fbbf24; text-align: center; }
-    #driveStatus { color: #94a3b8; text-align: center; font-size: 15px; }
-    .row { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 10px; }
-    .hidden { display: none !important; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #8e8e93; }
+    .live .dot { background: #ef4444; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.25; } }
+
+    /* নিচের বার */
+    #bottombar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
+      padding: 28px 16px max(18px, env(safe-area-inset-bottom));
+      background: linear-gradient(transparent, #000000cc);
+      display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;
+    }
+    #driveStatus { font-size: 13px; color: #d1d1d6; }
+    #driveStatus.warn { color: #fca5a5; }
+
+    /* সেটআপ কার্ড */
+    #setup {
+      position: fixed; inset: 0; z-index: 10; background: #000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; padding: 24px;
+      transition: opacity 0.35s;
+    }
+    #setup.gone { opacity: 0; pointer-events: none; }
+    #setup img { width: 76px; height: 76px; border-radius: 20px; box-shadow: 0 8px 40px #3b82f659; }
+    #setup h2 { font-size: 24px; }
+    .field {
+      width: 100%; max-width: 360px; padding: 16px; font-size: 18px; text-align: center;
+      border-radius: 16px; border: 1px solid #2c2c34; background: #111114; color: #fff; outline: none;
+    }
+    .field:focus { border-color: #3b82f6; }
+    .btn {
+      width: 100%; max-width: 360px; padding: 16px; font-size: 17px; font-weight: 700;
+      border: 0; border-radius: 16px; color: #fff; background: #2563eb;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn.ghost { background: #1c1c22; color: #60a5fa; }
+    .btn.ghost.ok { color: #4ade80; }
+    #setupMsg { color: #fbbf24; font-size: 14px; min-height: 20px; text-align: center; }
+
+    /* স্ক্রিন বন্ধ মোড */
+    #dim {
+      position: fixed; inset: 0; z-index: 20; background: #000; display: none;
+      align-items: center; justify-content: center; color: #2c2c34; font-size: 14px;
+    }
+    #dim.on { display: flex; }
   </style>
 </head>
 <body>
-  <h2>📷 ক্যামেরা মোড</h2>
-
-  <div class="row" id="setup">
-    <input id="code" type="password" autocomplete="off" placeholder="গোপন কোড দাও">
-    <button id="start">ক্যামেরা চালু করো</button>
-  </div>
-
-  <div class="row">
-    <button id="driveBtn" class="drive">☁️ গুগল ড্রাইভ সংযোগ করো</button>
-  </div>
-
   <video id="preview" autoplay muted playsinline></video>
-  <div id="status">কোড লিখে বাটনে চাপো</div>
-  <div id="driveStatus">ড্রাইভ: সংযুক্ত নয়</div>
+
+  <div id="topbar">
+    <div id="status">ক্যামেরা বন্ধ</div>
+    <div class="pill" id="livePill"><span class="dot"></span><span id="liveTxt">অফলাইন</span></div>
+  </div>
+
+  <div id="bottombar">
+    <div id="driveStatus">☁️ ড্রাইভ: সংযুক্ত নয়</div>
+    <button class="pill" id="dimBtn" style="border:0;color:#fff">🌙 স্ক্রিন কালো করো</button>
+  </div>
+
+  <div id="setup">
+    <img src="icon.svg" alt="">
+    <h2>ক্যামেরা মোড</h2>
+    <input id="code" class="field" type="password" autocomplete="off" placeholder="গোপন কোড দাও">
+    <button id="driveBtn" class="btn ghost">☁️ গুগল ড্রাইভ সংযোগ করো</button>
+    <button id="start" class="btn">ক্যামেরা চালু করো</button>
+    <div id="setupMsg"></div>
+  </div>
+
+  <div id="dim">স্ক্রিনে ট্যাপ করলে ফিরে আসবে</div>
 
   <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
     // ================= সেটিংস =================
     const CLIENT_ID = '5086911283-ngrpb3acvettopls7bn55lpfco5t2ldo.apps.googleusercontent.com';
     const SCOPE = 'https://www.googleapis.com/auth/drive.file';
-    const FOLDER_NAME = 'HomeCamera';   // ড্রাইভে এই নামে ফোল্ডার তৈরি হবে
-    const KEEP_DAYS = 3;                // এর চেয়ে পুরনো ক্লিপ মুছে যাবে
-    const SEGMENT_MS = 8000;            // প্রতিটি টুকরা ৮ সেকেন্ডের
-    const AFTER_MOTION_MS = 15000;      // নড়াচড়া থামার পরও ১৫ সেকেন্ড রেকর্ড চলবে
-    const MAX_QUEUE = 20;               // আপলোড আটকে গেলে সর্বোচ্চ ২০টা টুকরা জমা থাকবে
+    const FOLDER_NAME = 'HomeCamera';
+    const KEEP_DAYS = 3;
+    const SEGMENT_MS = 8000;
+    const AFTER_MOTION_MS = 15000;
+    const MAX_QUEUE = 20;
 
     const statusEl = document.getElementById('status');
     const driveStatusEl = document.getElementById('driveStatus');
     const preview = document.getElementById('preview');
     const setup = document.getElementById('setup');
+    const setupMsg = document.getElementById('setupMsg');
     const driveBtn = document.getElementById('driveBtn');
+    const livePill = document.getElementById('livePill');
+    const liveTxt = document.getElementById('liveTxt');
+    const dim = document.getElementById('dim');
     let stream, peer, wakeLock;
     let viewerConns = [];
 
@@ -78,7 +139,11 @@
 
     function driveStatus(msg, warn) {
       driveStatusEl.textContent = msg;
-      driveStatusEl.style.color = warn ? '#f87171' : '#94a3b8';
+      driveStatusEl.className = warn ? 'warn' : '';
+    }
+    function setLive(on, txt) {
+      livePill.classList.toggle('live', on);
+      liveTxt.textContent = txt;
     }
 
     // ================= গুগল ড্রাইভ =================
@@ -97,25 +162,26 @@
         callback: (resp) => {
           if (resp.error) {
             driveStatus('ড্রাইভ সংযোগ ব্যর্থ: ' + resp.error, true);
+            setupMsg.textContent = 'ড্রাইভ সংযোগ ব্যর্থ: ' + resp.error;
             return;
           }
           accessToken = resp.access_token;
           tokenExpiry = Date.now() + (Number(resp.expires_in) - 120) * 1000;
-          driveBtn.classList.add('hidden');
+          driveBtn.textContent = '✅ ড্রাইভ সংযুক্ত';
+          driveBtn.classList.add('ok');
+          setupMsg.textContent = '';
           driveStatus('☁️ ড্রাইভ সংযুক্ত');
           processQueue();
         },
         error_callback: () => {
-          driveBtn.textContent = '☁️ ড্রাইভ আবার সংযোগ করো';
-          driveBtn.classList.remove('hidden');
-          driveStatus('ড্রাইভ সংযোগ দরকার, বাটনে চাপো', true);
+          driveStatus('ড্রাইভ সংযোগ দরকার, সেটআপে গিয়ে আবার চাপো', true);
         }
       });
     }
 
     driveBtn.onclick = () => {
       if (!window.google || !google.accounts) {
-        driveStatus('গুগল লাইব্রেরি লোড হয়নি, একটু পরে আবার চাপো', true);
+        setupMsg.textContent = 'গুগল লাইব্রেরি লোড হয়নি, একটু পরে আবার চাপো';
         return;
       }
       if (!tokenClient) makeTokenClient();
@@ -159,7 +225,6 @@
       });
     }
 
-    // ৩ দিনের বেশি পুরনো ক্লিপ মুছে ফেলা (ঘণ্টায় সর্বোচ্চ একবার চেক)
     async function cleanupOld() {
       if (Date.now() - lastCleanup < 3600000) return;
       lastCleanup = Date.now();
@@ -179,7 +244,6 @@
     async function processQueue() {
       if (uploading || !uploadQueue.length) return;
       if (!accessToken || Date.now() > tokenExpiry) {
-        // টোকেন শেষ: চুপচাপ নতুন টোকেন চাওয়া, না পেলে বাটন দেখানো
         if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
         return;
       }
@@ -200,7 +264,7 @@
     setInterval(processQueue, 30000);
 
     function enqueue(seg) {
-      if (!tokenClient) return; // ড্রাইভ কখনো সংযোগ না করলে ক্লিপ জমানো হবে না
+      if (!tokenClient) return;
       const stamp = new Date(seg.time).toISOString().replace(/[:.]/g, '-');
       uploadQueue.push({ name: 'clip-' + stamp + '.' + recExt, blob: seg.blob });
       while (uploadQueue.length > MAX_QUEUE) uploadQueue.shift();
@@ -208,8 +272,6 @@
     }
 
     // ================= ইভেন্ট রেকর্ডিং =================
-    // ক্যামেরা সারাক্ষণ ৮ সেকেন্ডের টুকরায় রেকর্ড করে, শুধু মেমোরিতে রাখে।
-    // নড়াচড়া ধরা পড়লে আগের টুকরা + বর্তমান টুকরা + নড়াচড়া থামার ১৫ সেকেন্ড পর্যন্ত টুকরাগুলো ড্রাইভে যায়।
     const recMime = ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
       .find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
     const recExt = recMime && recMime.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
@@ -287,10 +349,8 @@
         const areaThreshold = 12 - sensitivity * 0.1;
 
         if (percent > areaThreshold) {
-          // রেকর্ডিংয়ের জন্য প্রতিবারই চিহ্ন দিয়ে রাখো
           curMotion = true;
           keepUntil = Date.now() + AFTER_MOTION_MS;
-          // ভিউয়ারকে অ্যালার্ট পাঠাও (৩ সেকেন্ডে একবার)
           if (Date.now() - lastAlert > 3000) {
             lastAlert = Date.now();
             sendToViewers({ type: 'motion', time: Date.now(), percent: Math.round(percent) });
@@ -301,23 +361,23 @@
     }
     setInterval(checkMotion, 500);
 
-    // ================= স্ক্রিন জাগিয়ে রাখা =================
+    // ================= স্ক্রিন জাগিয়ে রাখা + কালো মোড =================
     async function keepAwake() {
       try { wakeLock = await navigator.wakeLock.request('screen'); }
       catch (e) { console.log('wakeLock নেই', e); }
     }
+    document.getElementById('dimBtn').onclick = () => dim.classList.add('on');
+    dim.onclick = () => dim.classList.remove('on');
 
     // ================= ক্যামেরা চালু =================
     document.getElementById('start').onclick = async () => {
       const input = document.getElementById('code');
       const code = input.value.trim();
       if (code.length < 6) {
-        statusEl.textContent = 'কোড অন্তত ৬ অক্ষরের দাও';
+        setupMsg.textContent = 'কোড অন্তত ৬ অক্ষরের দাও';
         return;
       }
-
-      input.value = '';
-      setup.classList.add('hidden');
+      setupMsg.textContent = '';
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -325,19 +385,25 @@
           audio: { echoCancellation: true, noiseSuppression: true }
         });
       } catch (err) {
-        statusEl.textContent = 'ক্যামেরা পারমিশন পাওয়া যায়নি: ' + err.message;
-        setup.classList.remove('hidden');
+        setupMsg.textContent = 'ক্যামেরা বা মাইক্রোফোনের অনুমতি পাওয়া যায়নি: ' + err.message;
         return;
       }
 
+      // কোড নেওয়ার সাথে সাথেই ইনপুট মুছে সেটআপ কার্ড লুকিয়ে ফেলো
+      input.value = '';
+      setup.classList.add('gone');
+
       preview.srcObject = stream;
+      statusEl.textContent = 'সংযোগ হচ্ছে...';
+      setLive(false, 'সংযোগ হচ্ছে');
       keepAwake();
       startSegments();
 
       peer = new Peer('homecam-' + code, { config: { iceServers } });
 
       peer.on('open', () => {
-        statusEl.textContent = '✅ ক্যামেরা চালু। ভিউয়ারের জন্য অপেক্ষা করছে...';
+        statusEl.textContent = 'ক্যামেরা চালু';
+        setLive(false, 'অপেক্ষা করছে');
       });
 
       peer.on('connection', (conn) => {
@@ -353,9 +419,11 @@
 
       peer.on('call', (call) => {
         call.answer(stream);
-        statusEl.textContent = '🔴 কেউ লাইভ দেখছে';
+        statusEl.textContent = 'কেউ দেখছে';
+        setLive(true, 'লাইভ');
         call.on('close', () => {
-          statusEl.textContent = '✅ ক্যামেরা চালু। ভিউয়ারের জন্য অপেক্ষা করছে...';
+          statusEl.textContent = 'ক্যামেরা চালু';
+          setLive(false, 'অপেক্ষা করছে');
         });
       });
 
@@ -365,7 +433,6 @@
         statusEl.textContent = 'সমস্যা: ' + err.type;
         if (err.type === 'unavailable-id') {
           statusEl.textContent = 'এই কোড আগে থেকেই ব্যবহার হচ্ছে, পেজ রিফ্রেশ করে নতুন কোড দাও';
-          setup.classList.remove('hidden');
         }
       });
     };
